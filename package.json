@@ -1,0 +1,78 @@
+{
+  "name": "automated-it-support-platform",
+  "version": "1.0.0",
+  "description": "Comprehensive IT support management system for hospital environments",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "dev:docker": "docker-compose up -d",
+    "dev:backend": "npm run dev --workspace=@platform/backend",
+    "dev:frontend": "npm run dev --workspace=@platform/frontend",
+    "lint": "turbo run lint",
+    "lint:fix": "turbo run lint:fix",
+    "test": "turbo run test",
+    "test:unit": "turbo run test:unit",
+    "test:e2e": "turbo run test:e2e",
+    "test:coverage": "turbo run test:coverage",
+    "db:migrate": "npm run db:migrate --workspace=@platform/backend",
+    "db:seed": "npm run db:seed --workspace=@platform/backend",
+    "db:studio": "npm run db:studio --workspace=@platform/backend",
+    "docker:dev": "docker-compose -f docker-compose.dev.yml up -d",
+    "docker:prod": "docker-compose -f docker-compose.prod.yml up -d",
+    "setup": "npm install && npm run db:migrate && npm run db:seed",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "type-check": "turbo run type-check"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^18.4.3",
+    "@commitlint/config-conventional": "^18.4.3",
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/git": "^10.0.1",
+    "husky": "^8.0.3",
+    "lint-staged": "^15.2.0",
+    "prettier": "^3.1.1",
+    "semantic-release": "^22.0.8",
+    "turbo": "^1.11.2",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yourusername/automated-it-support-platform.git"
+  },
+  "keywords": [
+    "it-support",
+    "hospital-management",
+    "inventory-management",
+    "automation",
+    "nestjs",
+    "nextjs",
+    "typescript",
+    "postgresql"
+  ],
+  "author": "Your Organization",
+  "license": "MIT",
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md}": [
+      "prettier --write"
+    ]
+  },
+  "commitlint": {
+    "extends": [
+      "@commitlint/config-conventional"
+    ]
+  }
+}
