@@ -158,6 +158,108 @@ model Asset {
   @@map("assets")
 }
 
+// ============================================================================
+// WAREHOUSE INVENTORY MODELS
+// ============================================================================
+
+model InventoryItem {
+  id             String   @id @default(cuid())
+  name           String
+  description    String?
+  sku            String   @unique
+  barcode        String?
+  categoryId     String?
+  supplierId     String?
+  unitPrice      Float?
+  currentStock   Int      @default(0)
+  minStockLevel  Int      @default(0)
+  maxStockLevel  Int?
+  reorderPoint   Int?
+  unitOfMeasure  String?
+  location       String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relationships
+  category       InventoryCategory? @relation(fields: [categoryId], references: [id])
+  supplier       Supplier?          @relation(fields: [supplierId], references: [id])
+  stockMovements StockMovement[]
+  stockAlerts    StockAlert[]
+
+  @@map("inventory_items")
+}
+
+model InventoryCategory {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  parentId    String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Self-referencing relationship
+  parent   InventoryCategory?  @relation("InventoryCategoryHierarchy", fields: [parentId], references: [id])
+  children InventoryCategory[] @relation("InventoryCategoryHierarchy")
+
+  // Relationships
+  inventoryItems InventoryItem[]
+
+  @@map("inventory_categories")
+}
+
+model Supplier {
+  id          String   @id @default(cuid())
+  name        String
+  contactName String?
+  email       String?
+  phone       String?
+  address     String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  inventoryItems InventoryItem[]
+
+  @@map("suppliers")
+}
+
+model StockMovement {
+  id              String            @id @default(cuid())
+  inventoryItemId String
+  type            StockMovementType
+  quantity        Int
+  unitPrice       Float?
+  reference       String?
+  notes           String?
+  performedBy     String?
+  performedAt     DateTime          @default(now())
+
+  // Relationships
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id])
+
+  @@map("stock_movements")
+}
+
+model StockAlert {
+  id              String           @id @default(cuid())
+  inventoryItemId String
+  type            StockAlertType
+  message         String
+  threshold       Int?
+  isActive        Boolean          @default(true)
+  isResolved      Boolean          @default(false)
+  createdAt       DateTime         @default(now())
+  resolvedAt      DateTime?
+
+  // Relationships
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id])
+
+  @@map("stock_alerts")
+}
+
 model Transaction {
   id          String          @id @default(cuid())
   type        TransactionType
@@ -465,4 +567,21 @@ enum NotificationType {
   ISSUE_UPDATE
   MAINTENANCE_REMINDER
   SYSTEM_ALERT
+}
+
+enum StockMovementType {
+  STOCK_IN
+  STOCK_OUT
+  TRANSFER
+  ADJUSTMENT
+  RETURN
+  DAMAGED
+  EXPIRED
+}
+
+enum StockAlertType {
+  LOW_STOCK
+  OUT_OF_STOCK
+  OVERSTOCK
+  EXPIRY_WARNING
 }
