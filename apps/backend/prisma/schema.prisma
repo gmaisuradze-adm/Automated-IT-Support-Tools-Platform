@@ -1,0 +1,468 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// USER MANAGEMENT & AUTHENTICATION
+// ============================================================================
+
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  username    String   @unique
+  firstName   String
+  lastName    String
+  password    String
+  isActive    Boolean  @default(true)
+  isVerified  Boolean  @default(false)
+  lastLoginAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  roles       UserRole[]
+  sessions    UserSession[]
+  auditLogs   AuditLog[]
+  requests    Request[]
+  assignedRequests Request[] @relation("AssignedRequests")
+  issues      Issue[]
+  comments    Comment[]
+  notifications Notification[]
+
+  @@map("users")
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  users       UserRole[]
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  resource    String
+  action      String
+  description String?
+  createdAt   DateTime @default(now())
+
+  // Relationships
+  roles RolePermission[]
+
+  @@unique([resource, action])
+  @@map("permissions")
+}
+
+model UserRole {
+  id     String @id @default(cuid())
+  userId String
+  roleId String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+  @@map("user_roles")
+}
+
+model RolePermission {
+  id           String @id @default(cuid())
+  roleId       String
+  permissionId String
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserSession {
+  id           String    @id @default(cuid())
+  userId       String
+  refreshToken String    @unique
+  isActive     Boolean   @default(true)
+  expiresAt    DateTime
+  createdAt    DateTime  @default(now())
+  revokedAt    DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_sessions")
+}
+
+// ============================================================================
+// INVENTORY & WAREHOUSE MANAGEMENT
+// ============================================================================
+
+model Category {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  parentId    String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Self-referencing relationship for hierarchical categories
+  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryHierarchy")
+
+  // Relationships
+  assets Asset[]
+
+  @@map("categories")
+}
+
+model Asset {
+  id              String      @id @default(cuid())
+  assetTag        String      @unique
+  name            String
+  description     String?
+  serialNumber    String?
+  model           String?
+  manufacturer    String?
+  purchaseDate    DateTime?
+  purchasePrice   Float?
+  warrantyExpiry  DateTime?
+  condition       AssetCondition @default(NEW)
+  status          AssetStatus @default(AVAILABLE)
+  location        String?
+  categoryId      String
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Relationships
+  category        Category @relation(fields: [categoryId], references: [id])
+  transactions    Transaction[]
+  maintenanceRecords MaintenanceRecord[]
+  requests        RequestAsset[]
+
+  @@map("assets")
+}
+
+model Transaction {
+  id          String          @id @default(cuid())
+  type        TransactionType
+  assetId     String
+  fromLocation String?
+  toLocation   String?
+  quantity    Int             @default(1)
+  notes       String?
+  performedBy String
+  performedAt DateTime        @default(now())
+
+  // Relationships
+  asset Asset @relation(fields: [assetId], references: [id])
+
+  @@map("transactions")
+}
+
+model MaintenanceRecord {
+  id          String      @id @default(cuid())
+  assetId     String
+  type        MaintenanceType
+  description String
+  scheduledDate DateTime?
+  completedDate DateTime?
+  cost        Float?
+  performedBy String?
+  notes       String?
+  status      MaintenanceStatus @default(SCHEDULED)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  // Relationships
+  asset Asset @relation(fields: [assetId], references: [id])
+
+  @@map("maintenance_records")
+}
+
+// ============================================================================
+// REQUEST MANAGEMENT
+// ============================================================================
+
+model Request {
+  id          String        @id @default(cuid())
+  title       String
+  description String
+  type        RequestType
+  priority    Priority      @default(MEDIUM)
+  status      RequestStatus @default(PENDING)
+  requesterId String
+  assigneeId  String?
+  department  String?
+  dueDate     DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  closedAt    DateTime?
+
+  // Relationships
+  requester User @relation(fields: [requesterId], references: [id])
+  assignee  User? @relation("AssignedRequests", fields: [assigneeId], references: [id])
+  assets    RequestAsset[]
+  workflow  WorkflowStep[]
+  comments  Comment[]
+
+  @@map("requests")
+}
+
+model RequestAsset {
+  id        String @id @default(cuid())
+  requestId String
+  assetId   String
+  quantity  Int    @default(1)
+  notes     String?
+
+  request Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  asset   Asset   @relation(fields: [assetId], references: [id])
+
+  @@unique([requestId, assetId])
+  @@map("request_assets")
+}
+
+model WorkflowStep {
+  id          String       @id @default(cuid())
+  requestId   String
+  stepOrder   Int
+  name        String
+  description String?
+  status      StepStatus   @default(PENDING)
+  assigneeId  String?
+  completedAt DateTime?
+  notes       String?
+  createdAt   DateTime     @default(now())
+
+  request Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@unique([requestId, stepOrder])
+  @@map("workflow_steps")
+}
+
+// ============================================================================
+// ISSUE TRACKING & VERSION MANAGEMENT
+// ============================================================================
+
+model Issue {
+  id          String      @id @default(cuid())
+  title       String
+  description String
+  type        IssueType
+  priority    Priority    @default(MEDIUM)
+  status      IssueStatus @default(OPEN)
+  reporterId  String
+  assigneeId  String?
+  labels      String[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  closedAt    DateTime?
+
+  // Relationships
+  reporter User  @relation(fields: [reporterId], references: [id])
+  comments Comment[]
+  releases ReleaseIssue[]
+
+  @@map("issues")
+}
+
+model Release {
+  id          String        @id @default(cuid())
+  version     String        @unique
+  title       String
+  description String?
+  releaseDate DateTime
+  isPrerelease Boolean      @default(false)
+  changelog   String?
+  createdAt   DateTime      @default(now())
+
+  // Relationships
+  issues ReleaseIssue[]
+
+  @@map("releases")
+}
+
+model ReleaseIssue {
+  id        String @id @default(cuid())
+  releaseId String
+  issueId   String
+
+  release Release @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  issue   Issue   @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  @@unique([releaseId, issueId])
+  @@map("release_issues")
+}
+
+// ============================================================================
+// COMMUNICATION & NOTIFICATIONS
+// ============================================================================
+
+model Comment {
+  id        String   @id @default(cuid())
+  content   String
+  authorId  String
+  requestId String?
+  issueId   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  author  User     @relation(fields: [authorId], references: [id])
+  request Request? @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  issue   Issue?   @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  @@map("comments")
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  type      NotificationType
+  isRead    Boolean          @default(false)
+  data      Json?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+// ============================================================================
+// AUDIT & LOGGING
+// ============================================================================
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String
+  resource   String
+  resourceId String?
+  oldValues  Json?
+  newValues  Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum AssetCondition {
+  NEW
+  GOOD
+  FAIR
+  POOR
+  DAMAGED
+  DISPOSED
+}
+
+enum AssetStatus {
+  AVAILABLE
+  IN_USE
+  MAINTENANCE
+  RESERVED
+  DISPOSED
+}
+
+enum TransactionType {
+  RECEIVED
+  ISSUED
+  TRANSFERRED
+  RETURNED
+  DISPOSED
+}
+
+enum MaintenanceType {
+  PREVENTIVE
+  CORRECTIVE
+  EMERGENCY
+  UPGRADE
+}
+
+enum MaintenanceStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum RequestType {
+  EQUIPMENT_REQUEST
+  MAINTENANCE_REQUEST
+  SOFTWARE_REQUEST
+  ACCESS_REQUEST
+  OTHER
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  IN_PROGRESS
+  COMPLETED
+  REJECTED
+  CANCELLED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum StepStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  SKIPPED
+}
+
+enum IssueType {
+  BUG
+  FEATURE_REQUEST
+  IMPROVEMENT
+  TASK
+}
+
+enum IssueStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+  REJECTED
+}
+
+enum NotificationType {
+  INFO
+  SUCCESS
+  WARNING
+  ERROR
+  REQUEST_UPDATE
+  ISSUE_UPDATE
+  MAINTENANCE_REMINDER
+  SYSTEM_ALERT
+}
