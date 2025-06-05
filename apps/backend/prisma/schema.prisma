@@ -33,7 +33,11 @@ model User {
   auditLogs   AuditLog[]
   requests    Request[]
   assignedRequests Request[] @relation("AssignedRequests")
-  issues      Issue[]
+  reportedIssues Issue[] @relation("IssueReporter")
+  assignedIssues Issue[] @relation("IssueAssignee")
+  assignedAssets Asset[] @relation("AssetAssignedTo")
+  createdAssets Asset[] @relation("AssetCreatedBy")
+  assetAuditLogs AssetAuditLog[] @relation("AssetAuditUser")
   comments    Comment[]
   notifications Notification[]
 
@@ -127,6 +131,7 @@ model Category {
 
   // Relationships
   assets Asset[]
+  requests Request[]
 
   @@map("categories")
 }
@@ -144,15 +149,21 @@ model Asset {
   warrantyExpiry  DateTime?
   condition       AssetCondition @default(NEW)
   status          AssetStatus @default(AVAILABLE)
-  location        String?
+  locationId      String?
   categoryId      String
+  assignedToId    String?
+  createdById     String
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
   // Relationships
   category        Category @relation(fields: [categoryId], references: [id])
+  location        Location? @relation(fields: [locationId], references: [id])
+  assignedTo      User? @relation("AssetAssignedTo", fields: [assignedToId], references: [id])
+  createdBy       User @relation("AssetCreatedBy", fields: [createdById], references: [id])
   transactions    Transaction[]
   maintenanceRecords MaintenanceRecord[]
+  auditLogs       AssetAuditLog[]
   requests        RequestAsset[]
 
   @@map("assets")
@@ -310,6 +321,7 @@ model Request {
   status      RequestStatus @default(PENDING)
   requesterId String
   assigneeId  String?
+  categoryId  String?
   department  String?
   dueDate     DateTime?
   createdAt   DateTime      @default(now())
@@ -319,6 +331,7 @@ model Request {
   // Relationships
   requester User @relation(fields: [requesterId], references: [id])
   assignee  User? @relation("AssignedRequests", fields: [assigneeId], references: [id])
+  category  Category? @relation(fields: [categoryId], references: [id])
   assets    RequestAsset[]
   workflow  WorkflowStep[]
   comments  Comment[]
@@ -377,7 +390,8 @@ model Issue {
   closedAt    DateTime?
 
   // Relationships
-  reporter User  @relation(fields: [reporterId], references: [id])
+  reporter User  @relation("IssueReporter", fields: [reporterId], references: [id])
+  assignee User? @relation("IssueAssignee", fields: [assigneeId], references: [id])
   comments Comment[]
   releases ReleaseIssue[]
 
@@ -460,6 +474,7 @@ model AuditLog {
   resourceId String?
   oldValues  Json?
   newValues  Json?
+  details    Json?
   ipAddress  String?
   userAgent  String?
   createdAt  DateTime @default(now())
@@ -467,6 +482,84 @@ model AuditLog {
   user User? @relation(fields: [userId], references: [id])
 
   @@map("audit_logs")
+}
+
+// ============================================================================
+// LOCATION MANAGEMENT
+// ============================================================================
+
+model Location {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  building    String?
+  floor       String?
+  room        String?
+  address     String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  assets Asset[]
+
+  @@map("locations")
+}
+
+// ============================================================================
+// SYSTEM SETTINGS
+// ============================================================================
+
+model SystemSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  description String?
+  category    String?
+  isPublic    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("system_settings")
+}
+
+// ============================================================================
+// ASSET CATEGORIES
+// ============================================================================
+
+model AssetCategory {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  parentId    String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Self-referencing relationship for hierarchical categories
+  parent   AssetCategory?  @relation("AssetCategoryHierarchy", fields: [parentId], references: [id])
+  children AssetCategory[] @relation("AssetCategoryHierarchy")
+
+  @@map("asset_categories")
+}
+
+// ============================================================================
+// ASSET AUDIT LOG
+// ============================================================================
+
+model AssetAuditLog {
+  id        String   @id @default(cuid())
+  assetId   String
+  action    String
+  details   Json?
+  performedBy String
+  createdAt DateTime @default(now())
+
+  // Relationships
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  user  User  @relation("AssetAuditUser", fields: [performedBy], references: [id])
+
+  @@map("asset_audit_logs")
 }
 
 // ============================================================================
@@ -485,8 +578,10 @@ enum AssetCondition {
 enum AssetStatus {
   AVAILABLE
   IN_USE
+  ASSIGNED
   MAINTENANCE
   RESERVED
+  RETIRED
   DISPOSED
 }
 
